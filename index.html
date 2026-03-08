@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>松江市立川津小学校 PTA ホームページ</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="header">
+  <h1><a href="index.html">川津小学校ＰＴＡ</a></h1>
+  <a href="https://www.facebook.com/kawatusyouPTA" target="_blank" class="fb-link" title="Facebook">&#x1F1EB;</a>
+</div>
+
+<nav id="nav">
+  <ul>
+    <li><a href="index.html">ホーム</a></li>
+    <li><a href="event.html">お知らせ</a></li>
+    <li><a href="info.html">役立ち情報</a></li>
+    <li><a href="contact.html">コンタクト</a></li>
+  </ul>
+</nav>
+
+<div id="hero">
+  <!-- 学校の写真に差し替えてください（Google ドライブの公開リンクも可） -->
+  <img src="images/hero.jpg" alt="川津小学校" onerror="this.style.display='none'">
+</div>
+
+<div id="main">
+
+  <div class="section-title">| 更新情報</div>
+  <ul class="news-list" id="news-list">
+    <li class="loading">読み込み中...</li>
+  </ul>
+
+  <div class="greeting-box" style="margin-top:24px;">
+    <div class="section-title">| ご挨拶</div>
+    <div style="padding:16px; background:white; border:1px solid #ddd; margin-top:0;">
+      <p>
+        令和７年度ＰＴＡ執行部は、<strong>「やれるヒト やれるジカンで やれるコト 知恵を出し合い 楽しもう」</strong>をモットーに活動します。<br>
+        皆様のご理解ならびにご協力をよろしくお願い致します。
+      </p>
+      <p class="members" style="margin-top:12px; font-size:13px; color:#555;">
+        【会長】野津 良幸<br>
+        【副会長】紙谷 あゆ美 ／ 野津 昭文 ／ 内田 祐 ／ 藤原 一郎 ／ 中川 由紀 ／ 出來 佳子 ／ 富山 陽子 ／ 西崎 統大
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<div id="footer">
+  Copyright &copy; 川津小学校ＰＴＡ All Rights Reserved.
+</div>
+
+<script src="js/main.js"></script>
+<script>
+  renderHomeNews('news-list', 20);
+</script>
+</body>
+</html>
