@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if page.page_title %}{{ page.page_title }}{% else %}{{ page.title }} | 川津小学校PTA{% endif %}</title>
+  <link rel="stylesheet" href="{{ '/css/style.css' | relative_url }}?v={{ site.time | date: '%s' }}">
+</head>
+<body>
+
+<div id="header">
+  <h1><a href="{{ '/' | relative_url }}">川津小学校ＰＴＡ</a></h1>
+  <a href="https://www.facebook.com/kawatusyouPTA" target="_blank" class="fb-link" title="Facebook">&#x1F1EB;</a>
+</div>
+
+<nav id="nav">
+  <ul>
+    <li><a href="{{ '/' | relative_url }}">ホーム</a></li>
+    <li><a href="{{ '/event/' | relative_url }}">お知らせ</a></li>
+    <li><a href="{{ '/info/' | relative_url }}">役立ち情報</a></li>
+    <li><a href="{{ '/contact/' | relative_url }}">コンタクト</a></li>
+  </ul>
+</nav>
+
+{{ content }}
+
+<div id="footer">
+  Copyright &copy; 川津小学校ＰＴＡ All Rights Reserved.
+</div>
+
+</body>
+</html>
