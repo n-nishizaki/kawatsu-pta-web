@@ -164,7 +164,31 @@ function convertDocToMarkdown(doc, startIndex, title, date, membersOnly) {
     }
   }
 
-  return markdown.trim() + '\n';
+  return normalizeDriveUrls(markdown.trim() + '\n');
+}
+
+// ===== Google Drive URL を安定した CDN 形式に統一 =====
+// 運用者が任意の形式でドライブURLを貼り付けても自動変換される
+function normalizeDriveUrls(markdown) {
+  // パターン1: uc?id=FILE_ID&export=view（順番違いも対応）
+  markdown = markdown.replace(
+    /https:\/\/drive\.google\.com\/uc\?[^\s\)"]*/g,
+    function(match) {
+      var m = match.match(/[?&]id=([A-Za-z0-9_-]+)/);
+      return m ? 'https://lh3.googleusercontent.com/d/' + m[1] : match;
+    }
+  );
+  // パターン2: /file/d/FILE_ID/view または /edit
+  markdown = markdown.replace(
+    /https:\/\/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)\/[^\s\)"']*/g,
+    'https://lh3.googleusercontent.com/d/$1'
+  );
+  // パターン3: open?id=FILE_ID
+  markdown = markdown.replace(
+    /https:\/\/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)[^\s\)"']*/g,
+    'https://lh3.googleusercontent.com/d/$1'
+  );
+  return markdown;
 }
 
 // ヘディングスタイルを Markdown に変換
