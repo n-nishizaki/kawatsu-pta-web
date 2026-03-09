@@ -143,7 +143,8 @@ function convertDocToMarkdown(doc, startIndex, title, date, membersOnly) {
           // 画像を Google ドライブに保存して Markdown の img 記法を挿入
           markdown += saveImageToMarkdown(child.asInlineImage()) + '\n\n';
         } else if (child.getType() === DocumentApp.ElementType.TEXT) {
-          textContent += child.asText().getText();
+          // 太字・斜体・文字色・フォントサイズを保持して変換
+          textContent += convertTextToMarkdown(child.asText());
         }
       }
 
@@ -189,6 +190,53 @@ function normalizeDriveUrls(markdown) {
     'https://lh3.googleusercontent.com/d/$1'
   );
   return markdown;
+}
+
+// ===== テキストの書式（太字・斜体・文字色・フォントサイズ）を Markdown/HTML に変換 =====
+function convertTextToMarkdown(textObj) {
+  const fullText = textObj.getText();
+  if (!fullText) return '';
+
+  // 書式が変わる位置のインデックス一覧を取得
+  const indices = textObj.getTextAttributeIndices();
+  if (!indices || indices.length === 0) return fullText;
+
+  let result = '';
+
+  for (let i = 0; i < indices.length; i++) {
+    const start = indices[i];
+    const end = (i + 1 < indices.length) ? indices[i + 1] : fullText.length;
+    const segment = fullText.substring(start, end);
+    if (!segment) continue;
+
+    const bold     = textObj.isBold(start);
+    const italic   = textObj.isItalic(start);
+    const color    = textObj.getForegroundColor(start); // "#rrggbb" or null
+    const fontSize = textObj.getFontSize(start);        // pt数 or null（未設定はnull）
+
+    // 黒以外の文字色、または明示的なフォントサイズがある場合は HTML span
+    const hasColor = color && color !== '#000000';
+    const hasSize  = !!fontSize;
+
+    if (hasColor || hasSize) {
+      let style = '';
+      if (hasColor) style += 'color:' + color + ';';
+      if (hasSize)  style += 'font-size:' + fontSize + 'pt;';
+      if (bold)     style += 'font-weight:bold;';
+      if (italic)   style += 'font-style:italic;';
+      result += '<span style="' + style + '">' + segment + '</span>';
+    } else if (bold && italic) {
+      result += '***' + segment + '***';
+    } else if (bold) {
+      result += '**' + segment + '**';
+    } else if (italic) {
+      result += '*' + segment + '*';
+    } else {
+      result += segment;
+    }
+  }
+
+  return result;
 }
 
 // ヘディングスタイルを Markdown に変換
