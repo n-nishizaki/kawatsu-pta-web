@@ -14,9 +14,10 @@
  * ・ドキュメントに直接貼り付けた画像は、Google ドライブに自動保存されます
  *
  * 【初期設定（スクリプトプロパティに以下を設定）】
- * GITHUB_TOKEN  : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
- * GITHUB_OWNER  : GitHub アカウント名 (例: kawatsupta)
- * GITHUB_REPO   : リポジトリ名 (例: kawatsu-pta-web)
+ * GITHUB_TOKEN    : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
+ * GITHUB_OWNER    : GitHub アカウント名 (例: kawatsupta)
+ * GITHUB_REPO     : リポジトリ名 (例: kawatsu-pta-web)
+ * SPREADSHEET_ID  : ご挨拶・役立ち情報・リンク集を管理するスプレッドシートのID
  */
 
 // ===== メニューを追加 =====
@@ -26,6 +27,8 @@ function onOpen() {
     .addItem('このドキュメントを公開する', 'publishDocument')
     .addSeparator()
     .addItem('会員限定として公開する', 'publishDocumentMembersOnly')
+    .addSeparator()
+    .addItem('サイト情報を更新する（ご挨拶・役立ち情報・リンク集）', 'publishSiteInfo')
     .addToUi();
 }
 
@@ -338,6 +341,78 @@ function pushToGitHub(filepath, content, commitMessage) {
   const code = putRes.getResponseCode();
   if (code !== 200 && code !== 201) {
     throw new Error('GitHub API エラー: HTTP ' + code + '\n' + putRes.getContentText());
+  }
+}
+
+// ===== サイト情報（ご挨拶・役立ち情報・リンク集）をスプレッドシートから更新 =====
+function publishSiteInfo() {
+  var ui = DocumentApp.getUi();
+  var result = ui.alert(
+    'サイト情報の更新',
+    'スプレッドシートの内容でご挨拶・役立ち情報・リンク集を更新します。\nよろしいですか？',
+    ui.ButtonSet.YES_NO
+  );
+  if (result !== ui.Button.YES) {
+    ui.alert('キャンセルしました。');
+    return;
+  }
+
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var ssId = props.getProperty('SPREADSHEET_ID');
+    if (!ssId) {
+      throw new Error(
+        'スクリプトプロパティ SPREADSHEET_ID が設定されていません。\n' +
+        'Apps Script の「プロジェクトの設定」→「スクリプト プロパティ」で設定してください。'
+      );
+    }
+    var ss = SpreadsheetApp.openById(ssId);
+
+    // --- ご挨拶 ---
+    var greetingSheet = ss.getSheetByName('ご挨拶');
+    var greetingText = String(greetingSheet.getRange('B1').getValue());
+    var greetingJson = JSON.stringify({ text: greetingText });
+    pushToGitHub('_data/greeting.json', greetingJson, 'ご挨拶を更新');
+
+    // --- 役立ち情報 ---
+    var infoSheet = ss.getSheetByName('役立ち情報');
+    var infoRows = infoSheet.getDataRange().getValues();
+    var links = infoRows
+      .filter(function(row) { return String(row[0]).trim(); })
+      .map(function(row) {
+        var title = String(row[0]).trim();
+        var membersOnly = title.indexOf('【会員限定】') >= 0;
+        return {
+          name:         title.replace('【会員限定】', '').trim(),
+          desc:         String(row[1] || '').trim(),
+          url:          String(row[2] || '#').trim(),
+          members_only: membersOnly
+        };
+      });
+
+    // --- リンク集 ---
+    var linkSheet = ss.getSheetByName('リンク集');
+    var linkRows = linkSheet.getDataRange().getValues();
+    var extLinks = linkRows
+      .filter(function(row) { return String(row[0]).trim(); })
+      .map(function(row) {
+        return {
+          name: String(row[0]).trim(),
+          url:  String(row[1] || '#').trim()
+        };
+      });
+
+    var infoJson = JSON.stringify({ links: links, ext_links: extLinks });
+    pushToGitHub('_data/info.json', infoJson, '役立ち情報・リンク集を更新');
+
+    ui.alert(
+      '更新完了',
+      'サイト情報を更新しました！\n数分後にサイトに反映されます。',
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ui.alert('エラー', '更新に失敗しました。\n\nエラー内容:\n' + e.message, ui.ButtonSet.OK);
+    console.error(e);
   }
 }
 

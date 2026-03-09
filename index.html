@@ -32,14 +32,9 @@ page_title: 松江市立川津小学校 PTA ホームページ
   <div class="greeting-box">
     <div class="section-title">| ご挨拶</div>
     <div style="padding:16px; background:white; border:1px solid #ddd; margin-top:0;">
-      <p>
-        令和７年度ＰＴＡ執行部は、<strong>「やれるヒト やれるジカンで やれるコト 知恵を出し合い 楽しもう」</strong>をモットーに活動します。<br>
-        皆様のご理解ならびにご協力をよろしくお願い致します。
-      </p>
-      <p class="members">
-        【会長】野津 良幸<br>
-        【副会長】紙谷 あゆ美 ／ 野津 昭文 ／ 内田 祐 ／ 藤原 一郎 ／ 中川 由紀 ／ 出來 佳子 ／ 富山 陽子 ／ 西崎 統大
-      </p>
+      {% if site.data.greeting %}
+      <p>{{ site.data.greeting.text }}</p>
+      {% endif %}
     </div>
   </div>
 
