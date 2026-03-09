@@ -33,7 +33,7 @@ page_title: 松江市立川津小学校 PTA ホームページ
     <div class="section-title">| ご挨拶</div>
     <div style="padding:16px; background:white; border:1px solid #ddd; margin-top:0;">
       {% if site.data.greeting %}
-      <p>{{ site.data.greeting.text }}</p>
+      <p>{{ site.data.greeting.text | newline_to_br }}</p>
       {% endif %}
     </div>
   </div>
