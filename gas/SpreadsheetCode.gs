@@ -6,9 +6,10 @@
  * スプレッドシートを開いて「拡張機能」→「Apps Script」からこのファイルを貼り付けてください。
  *
  * 【初期設定（スクリプトプロパティに以下を設定）】
- * GITHUB_TOKEN  : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
- * GITHUB_OWNER  : GitHub アカウント名 (例: kawatsupta)
- * GITHUB_REPO   : リポジトリ名 (例: kawatsu-pta-web)
+ * GITHUB_TOKEN    : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
+ * GITHUB_OWNER    : GitHub アカウント名 (例: n-nishizaki)
+ * GITHUB_REPO     : リポジトリ名 (例: kawatsu-pta-web)
+ * MEMBER_PASSWORD : 会員限定ページのパスワード（平文で設定。このプロパティはスクリプト管理者のみ閲覧可）
  */
 
 // ===== メニューを追加 =====
@@ -16,10 +17,12 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('PTA公開')
     .addItem('サイト情報を更新する（ご挨拶・役立ち情報・リンク集）', 'publishSiteInfo')
+    .addSeparator()
+    .addItem('会員限定ページを更新する（スポ少情報・広報誌）', 'publishMembersInfo')
     .addToUi();
 }
 
-// ===== サイト情報を更新 =====
+// ===== サイト情報を更新（一般公開） =====
 function publishSiteInfo() {
   var ui = SpreadsheetApp.getUi();
   var result = ui.alert(
@@ -52,7 +55,7 @@ function publishSiteInfo() {
         return {
           name:         title.replace('【会員限定】', '').trim(),
           desc:         String(row[1] || '').trim(),
-          url:          String(row[2] || '#').trim(),
+          url:          membersOnly ? '/kawatsu-pta-web/members.html' : String(row[2] || '#').trim(),
           members_only: membersOnly
         };
       });
@@ -81,6 +84,118 @@ function publishSiteInfo() {
     ui.alert('エラー', '更新に失敗しました。\n\nエラー内容:\n' + e.message, ui.ButtonSet.OK);
     console.error(e);
   }
+}
+
+// ===== 会員限定ページを更新（スポ少情報・広報誌） =====
+function publishMembersInfo() {
+  var ui = SpreadsheetApp.getUi();
+
+  // パスワードをスクリプトプロパティから取得
+  var props = PropertiesService.getScriptProperties();
+  var memberPassword = props.getProperty('MEMBER_PASSWORD');
+  if (!memberPassword) {
+    ui.alert(
+      '設定エラー',
+      'スクリプトプロパティ「MEMBER_PASSWORD」が設定されていません。\n' +
+      '「プロジェクトの設定」→「スクリプトのプロパティ」から設定してください。',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  var result = ui.alert(
+    '会員限定ページの更新',
+    'スポ少情報・広報誌の内容を暗号化してサイトに反映します。\nよろしいですか？',
+    ui.ButtonSet.YES_NO
+  );
+  if (result !== ui.Button.YES) {
+    ui.alert('キャンセルしました。');
+    return;
+  }
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // --- スポ少情報（A=クラブ名, B=活動時間, C=対象学年, D=連絡先）---
+    var sportsSheet = ss.getSheetByName('スポ少情報');
+    var sportsClubs = [];
+    if (sportsSheet) {
+      var sportsRows = sportsSheet.getDataRange().getValues();
+      // 1行目がヘッダーの場合はスキップ
+      var startRow = (String(sportsRows[0][0]).trim() === 'クラブ名') ? 1 : 0;
+      for (var i = startRow; i < sportsRows.length; i++) {
+        var row = sportsRows[i];
+        if (!String(row[0]).trim()) continue;
+        sportsClubs.push({
+          name:    String(row[0] || '').trim(),
+          days:    String(row[1] || '').trim(),
+          grades:  String(row[2] || '').trim(),
+          contact: String(row[3] || '').trim()
+        });
+      }
+    }
+
+    // --- 広報誌（A=号数ラベル, B=Google Drive URL, C=ファイルサイズ）---
+    var newsletterSheet = ss.getSheetByName('広報誌');
+    var newsletters = [];
+    if (newsletterSheet) {
+      var newsletterRows = newsletterSheet.getDataRange().getValues();
+      var nlStartRow = (String(newsletterRows[0][0]).trim() === '号数') ? 1 : 0;
+      for (var j = nlStartRow; j < newsletterRows.length; j++) {
+        var nlRow = newsletterRows[j];
+        if (!String(nlRow[0]).trim()) continue;
+        newsletters.push({
+          label: String(nlRow[0] || '').trim(),
+          url:   String(nlRow[1] || '').trim(),
+          size:  String(nlRow[2] || '').trim()
+        });
+      }
+    }
+
+    // --- JSON 組み立て → 暗号化 → push ---
+    var plainJson = JSON.stringify({
+      sports_clubs: sportsClubs,
+      newsletters:  newsletters
+    });
+
+    var encrypted = encryptXOR(plainJson, memberPassword);
+    var membersJson = JSON.stringify({ data: encrypted });
+
+    pushToGitHub('data/members.json', membersJson, '会員限定ページを更新');
+
+    ui.alert(
+      '更新完了',
+      '会員限定ページを更新しました！\n数分後にサイトに反映されます。\n\n' +
+      '・スポ少情報: ' + sportsClubs.length + ' クラブ\n' +
+      '・広報誌: ' + newsletters.length + ' 件',
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ui.alert('エラー', '更新に失敗しました。\n\nエラー内容:\n' + e.message, ui.ButtonSet.OK);
+    console.error(e);
+  }
+}
+
+// ===== XOR 暗号化（SHA-256 をキーとして使用）=====
+// ブラウザ側の js/members.js と同じアルゴリズム
+function encryptXOR(plainText, password) {
+  // SHA-256(password) を 32 バイトのキーとして使う
+  var keyBytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    password,
+    Utilities.Charset.UTF_8
+  );
+  // GAS の computeDigest は signed byte（-128〜127）を返すので unsigned に変換
+  keyBytes = keyBytes.map(function(b) { return b < 0 ? b + 256 : b; });
+
+  var textBytes = Utilities.newBlob(plainText, 'UTF-8').getBytes();
+  textBytes = textBytes.map(function(b) { return b < 0 ? b + 256 : b; });
+
+  var result = textBytes.map(function(b, i) {
+    return b ^ keyBytes[i % 32];
+  });
+
+  return Utilities.base64Encode(result);
 }
 
 // ===== GitHub API でファイルを作成・更新 =====
