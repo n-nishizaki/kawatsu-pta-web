@@ -18,7 +18,10 @@ function getCurrentSection() {
   return new URLSearchParams(location.search).get('section') || null;
 }
 
-// DOMContentLoaded: Enter キー対応 + ページタイトル初期化
+// ===== localStorage キー =====
+var STORAGE_KEY = 'members_pw';
+
+// DOMContentLoaded: Enter キー対応 + ページタイトル初期化 + 自動ログイン
 document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('member-pw').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') memberLogin();
@@ -33,6 +36,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var label = '| ' + SECTION_CONFIG[section].title;
     document.getElementById('page-title').textContent = label;
     document.title = SECTION_CONFIG[section].title + ' | 川津小学校PTA';
+  }
+
+  // 保存済みパスワードがあれば自動ログイン
+  var savedPw = localStorage.getItem(STORAGE_KEY);
+  if (savedPw) {
+    document.getElementById('member-id').value = 'PTA';
+    document.getElementById('member-pw').value = savedPw;
+    memberLogin();
   }
 });
 
@@ -85,6 +96,7 @@ async function memberLogin() {
 
     // データ未設定の場合
     if (!json.data) {
+      localStorage.setItem(STORAGE_KEY, pw);
       showContent({ sports_clubs: [], newsletters: [] });
       return;
     }
@@ -94,6 +106,7 @@ async function memberLogin() {
     try {
       plain = await decrypt(json.data, pw);
     } catch (e) {
+      localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
       showLoginError('IDまたはパスワードが違います');
       return;
     }
@@ -103,11 +116,13 @@ async function memberLogin() {
     try {
       content = JSON.parse(plain);
     } catch (e) {
+      localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
       showLoginError('IDまたはパスワードが違います');
       return;
     }
 
-    // 認証成功 → コンテンツ表示
+    // 認証成功 → パスワードを保存してコンテンツ表示
+    localStorage.setItem(STORAGE_KEY, pw);
     showContent(content);
 
   } catch (e) {
@@ -116,6 +131,15 @@ async function memberLogin() {
     btn.disabled = false;
     btn.textContent = 'ログイン';
   }
+}
+
+// ===== ログアウト処理 =====
+
+function memberLogout() {
+  localStorage.removeItem(STORAGE_KEY);
+  document.getElementById('member-pw').value = '';
+  document.getElementById('members-content').style.display = 'none';
+  document.getElementById('login-area').style.display = 'block';
 }
 
 // ===== コンテンツ表示 =====
