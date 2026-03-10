@@ -55,7 +55,7 @@ function publishSiteInfo() {
         return {
           name:         title.replace('【会員限定】', '').trim(),
           desc:         String(row[1] || '').trim(),
-          url:          membersOnly ? '/kawatsu-pta-web/members.html' : String(row[2] || '#').trim(),
+          url:          membersOnly ? '/kawatsu-pta-web/members/' : String(row[2] || '#').trim(),
           members_only: membersOnly
         };
       });
