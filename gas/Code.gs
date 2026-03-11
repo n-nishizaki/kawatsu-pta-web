@@ -18,20 +18,29 @@
  * （空行）
  * ここから本文...
  *
- * 【初期設定（スクリプトプロパティに以下を設定）】
+ * 【初期設定（アドオン管理者のみ・1回だけ）】
+ * GAS エディタの「プロジェクトの設定」→「スクリプトプロパティ」に以下を追加:
  * GITHUB_TOKEN  : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
  * GITHUB_OWNER  : GitHub アカウント名 (例: n-nishizaki)
  * GITHUB_REPO   : リポジトリ名 (例: kawatsu-pta-web)
  */
 
-// ===== メニューを追加 =====
-function onOpen() {
-  DocumentApp.getUi()
-    .createMenu('PTA公開')
-    .addItem('新規記事テンプレートを作成', 'createNewArticle')
-    .addSeparator()
-    .addItem('このドキュメントを公開する', 'publishDocument')
-    .addToUi();
+// ===== メニューを追加（アドオン版） =====
+function onOpen(e) {
+  var menu = DocumentApp.getUi().createAddonMenu();
+  if (e && e.authMode === ScriptApp.AuthMode.NONE) {
+    menu.addItem('有効にする', 'onInstall');
+  } else {
+    menu
+      .addItem('新規記事テンプレートを作成', 'createNewArticle')
+      .addSeparator()
+      .addItem('このドキュメントを公開する', 'publishDocument');
+  }
+  menu.addToUi();
+}
+
+function onInstall(e) {
+  onOpen(e);
 }
 
 // ===== 新規記事テンプレートを作成 =====
@@ -357,7 +366,8 @@ function pushToGitHub(filepath, content, commitMessage) {
   if (!owner || !repo || !token) {
     throw new Error(
       'スクリプトプロパティが設定されていません。\n' +
-      'GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO を設定してください。'
+      'GAS エディタの「プロジェクトの設定」→「スクリプトプロパティ」に\n' +
+      'GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO を追加してください。'
     );
   }
 
