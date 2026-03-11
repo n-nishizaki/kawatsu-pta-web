@@ -186,7 +186,7 @@ function showContent(content) {
     content.newsletters.forEach(function (item, idx) {
       var li = document.createElement('li');
       li.innerHTML =
-        '<a href="' + esc(item.url) + '" target="_blank" rel="noopener">' +
+        '<a href="' + esc(item.url) + '">' +
           esc(item.label) + '：<span style="text-decoration:underline;">ＰＤＦファイル</span>' +
           (item.size ? '　（File Size ' + esc(item.size) + '）' : '') +
           (idx === 0 ? '　<span style="background:#e00;color:#fff;font-size:0.75em;padding:2px 6px;border-radius:2px;vertical-align:middle;">NEW</span>' : '') +
