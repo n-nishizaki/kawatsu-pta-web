@@ -249,9 +249,17 @@ a:hover {
   font-size: 20px;
   margin-bottom: 6px;
 }
-.post-header .post-date {
+.post-meta {
   color: #777;
   font-size: 13px;
+}
+.post-meta-label {
+  font-weight: bold;
+  color: #555;
+}
+.post-meta-sep {
+  margin: 0 6px;
+  color: #bbb;
 }
 .post-body {
   background: white;

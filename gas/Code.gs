@@ -4,18 +4,23 @@
  * 【使い方】
  * 1. Google ドキュメントを開く
  * 2. メニューに「PTA公開」が表示される
- * 3. 「このドキュメントを公開する」をクリック
- * 4. 確認ダイアログで「はい」→ 数分以内にサイトに反映される
+ * 3. 「新規記事テンプレートを作成」でひな形ドキュメントを作成
+ * 4. タイトル・ID・公開日・本文を入力し「このドキュメントを公開する」をクリック
  *
- * 【ドキュメントの書き方】
- * ・ドキュメントのファイル名 → 記事タイトルになります
- * ・1行目に日付（例: 2026-01-22）を記入してください
- * ・2行目以降が記事本文です
- * ・ドキュメントに直接貼り付けた画像は、Google ドライブに自動保存されます
+ * 【ドキュメントの構成】
+ * ┌──────────┬──────────────────┐
+ * │ ID       │ 20260122-oyako   │ ← 記事ごとに一意な識別子（画像フォルダ名にも使用）
+ * ├──────────┼──────────────────┤
+ * │ 公開日   │ 2026-01-22       │ ← サイトに表示される日付（YYYY-MM-DD）
+ * ├──────────┼──────────────────┤
+ * │ 更新日   │                  │ ← 記事を修正した日（初回は空欄でOK）
+ * └──────────┴──────────────────┘
+ * （空行）
+ * ここから本文...
  *
  * 【初期設定（スクリプトプロパティに以下を設定）】
  * GITHUB_TOKEN  : GitHub Fine-grained Personal Access Token (Contents: Read and Write)
- * GITHUB_OWNER  : GitHub アカウント名 (例: kawatsupta)
+ * GITHUB_OWNER  : GitHub アカウント名 (例: n-nishizaki)
  * GITHUB_REPO   : リポジトリ名 (例: kawatsu-pta-web)
  */
 
@@ -23,8 +28,45 @@
 function onOpen() {
   DocumentApp.getUi()
     .createMenu('PTA公開')
+    .addItem('新規記事テンプレートを作成', 'createNewArticle')
+    .addSeparator()
     .addItem('このドキュメントを公開する', 'publishDocument')
     .addToUi();
+}
+
+// ===== 新規記事テンプレートを作成 =====
+function createNewArticle() {
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const doc = DocumentApp.create('【タイトルを入力】');
+  const body = doc.getBody();
+  body.clear();
+
+  // 公開情報テーブル
+  const table = body.appendTable([
+    ['ID',    ''],
+    ['公開日', today],
+    ['更新日', '']
+  ]);
+  // ラベル列をグレー背景に
+  for (let i = 0; i < 3; i++) {
+    table.getCell(i, 0).setBackgroundColor('#eeeeee');
+  }
+
+  body.appendParagraph('');
+  body.appendParagraph('ここに本文を書いてください。');
+
+  const ui = DocumentApp.getUi();
+  ui.alert(
+    '新規記事テンプレートを作成しました',
+    '以下の URL を開いて記事を書いてください。\n\n' + doc.getUrl() +
+    '\n\n【記入方法】\n' +
+    '・ドキュメントのファイル名 → 記事タイトルになります\n' +
+    '・ID: 記事を識別する短い名前（例: 20260122-oyako）\n' +
+    '  ※半角英数字とハイフンのみ推奨。画像フォルダ名にも使われます。\n' +
+    '・公開日: サイトに表示する日付（YYYY-MM-DD 形式）\n' +
+    '・更新日: 記事を修正した場合に記入。初回は空欄でOK。',
+    ui.ButtonSet.OK
+  );
 }
 
 // ===== 公開 =====
@@ -36,32 +78,45 @@ function publishDocument() {
 function _publish() {
   const ui = DocumentApp.getUi();
   const doc = DocumentApp.getActiveDocument();
-
   const title = doc.getName();
   const body = doc.getBody();
-  const firstParagraph = body.getParagraphs()[0].getText().trim();
 
-  // 1行目が日付（YYYY-MM-DD形式）かチェック
-  let date = '';
-  let contentStartIndex = 0;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(firstParagraph)) {
-    date = firstParagraph;
-    contentStartIndex = 1;
+  // ドキュメント先頭のテーブルから公開情報を読み取る
+  let articleId, publishDate, updateDate;
+  const firstElement = body.getChild(0);
+
+  if (firstElement.getType() === DocumentApp.ElementType.TABLE) {
+    const table = firstElement.asTable();
+    articleId  = table.getCell(0, 1).getText().trim();
+    publishDate = table.getCell(1, 1).getText().trim();
+    updateDate  = table.getCell(2, 1).getText().trim();
   } else {
-    date = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-    contentStartIndex = 0;
-    ui.alert(
-      '日付の設定',
-      '1行目に日付（例: 2026-01-22）が見つからなかったため、今日の日付（' + date + '）を使用します。',
-      ui.ButtonSet.OK
-    );
+    // 旧形式（1行目に日付）へのフォールバック
+    const firstPara = body.getParagraphs()[0].getText().trim();
+    publishDate = /^\d{4}-\d{2}-\d{2}$/.test(firstPara)
+      ? firstPara
+      : Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+    articleId  = slugify(title);
+    updateDate = '';
   }
 
-  // --- 確認ダイアログ ---
+  // バリデーション
+  if (!articleId) {
+    ui.alert('エラー', 'ID が入力されていません。テーブルの ID 欄を入力してください。', ui.ButtonSet.OK);
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(publishDate)) {
+    ui.alert('エラー', '公開日の形式が正しくありません。YYYY-MM-DD で入力してください（例: 2026-01-22）。', ui.ButtonSet.OK);
+    return;
+  }
+
+  // 確認ダイアログ
   const confirmMsg =
     '以下の内容でWebサイトに公開します。よろしいですか？\n\n' +
     'タイトル: ' + title + '\n' +
-    '日付: ' + date + '\n' +
+    'ID: ' + articleId + '\n' +
+    '公開日: ' + publishDate + '\n' +
+    (updateDate ? '更新日: ' + updateDate + '\n' : '') +
     '\n※ドキュメント内の画像はGoogle ドライブに自動保存されます。\n' +
     '※公開後は数分でサイトに反映されます。';
 
@@ -71,13 +126,12 @@ function _publish() {
     return;
   }
 
-  // --- Markdown に変換して GitHub に push ---
-  const slug = slugify(title);
-  const filename = date + '-' + slug + '.md';
+  const safeId  = slugify(articleId);
+  const filename = publishDate + '-' + safeId + '.md';
   const filepath = '_posts/' + filename;
 
   try {
-    const markdown = convertDocToMarkdown(doc, contentStartIndex, title, date);
+    const markdown = convertDocToMarkdown(doc, title, publishDate, updateDate, safeId);
     pushToGitHub(filepath, markdown, title + ' を公開');
     ui.alert(
       '公開完了',
@@ -91,33 +145,49 @@ function _publish() {
 }
 
 // ===== Google ドキュメントを Markdown（Jekyll フロントマター付き）に変換 =====
-function convertDocToMarkdown(doc, startIndex, title, date) {
+function convertDocToMarkdown(doc, title, publishDate, updateDate, articleId) {
   const body = doc.getBody();
   let markdown = '';
 
   // Jekyll フロントマターを生成
   markdown += '---\n';
   markdown += 'title: "' + title.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"\n';
-  markdown += 'date: ' + date + '\n';
+  markdown += 'date: ' + publishDate + '\n';
+  if (updateDate) markdown += 'updated: "' + updateDate + '"\n';
   markdown += 'layout: post\n';
   markdown += '---\n\n';
 
-  // ドキュメント本文を段落単位で変換
-  let elementCount = 0;
+  // 本文の開始インデックスを決定（ヘッダーテーブルと空行をスキップ）
   const numElements = body.getNumChildren();
+  const firstType = body.getChild(0).getType();
+  let startIdx = 0;
 
-  for (let i = 0; i < numElements; i++) {
+  if (firstType === DocumentApp.ElementType.TABLE) {
+    // 新形式: テーブルとその直後の空行をスキップ
+    startIdx = 1;
+    while (startIdx < numElements) {
+      const el = body.getChild(startIdx);
+      if (el.getType() === DocumentApp.ElementType.PARAGRAPH &&
+          !el.asParagraph().getText().trim()) {
+        startIdx++;
+      } else {
+        break;
+      }
+    }
+  } else {
+    // 旧形式: 1行目が日付なら読み飛ばす
+    const firstText = body.getChild(0).asParagraph
+      ? body.getChild(0).asParagraph().getText().trim()
+      : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(firstText)) startIdx = 1;
+  }
+
+  // ドキュメント本文を段落単位で変換
+  for (let i = startIdx; i < numElements; i++) {
     const element = body.getChild(i);
     const type = element.getType();
 
     if (type === DocumentApp.ElementType.PARAGRAPH) {
-      // startIndex でスキップ（日付行を除外）
-      if (elementCount < startIndex) {
-        elementCount++;
-        continue;
-      }
-      elementCount++;
-
       const para = element.asParagraph();
       const heading = para.getHeading();
       const numParaChildren = para.getNumChildren();
@@ -126,15 +196,12 @@ function convertDocToMarkdown(doc, startIndex, title, date) {
       for (let j = 0; j < numParaChildren; j++) {
         const child = para.getChild(j);
         if (child.getType() === DocumentApp.ElementType.INLINE_IMAGE) {
-          // テキストが前にある場合は先に出力
           if (textContent.trim()) {
             markdown += applyHeading(heading, textContent.trim()) + '\n\n';
             textContent = '';
           }
-          // 画像を Google ドライブに保存して Markdown の img 記法を挿入
-          markdown += saveImageToMarkdown(child.asInlineImage()) + '\n\n';
+          markdown += saveImageToMarkdown(child.asInlineImage(), articleId) + '\n\n';
         } else if (child.getType() === DocumentApp.ElementType.TEXT) {
-          // 太字・斜体・文字色・フォントサイズを保持して変換
           textContent += convertTextToMarkdown(child.asText());
         }
       }
@@ -144,9 +211,6 @@ function convertDocToMarkdown(doc, startIndex, title, date) {
       }
 
     } else if (type === DocumentApp.ElementType.LIST_ITEM) {
-      if (elementCount < startIndex) {
-        continue;
-      }
       const listItem = element.asListItem();
       const text = listItem.getText().trim();
       if (!text) continue;
@@ -160,9 +224,7 @@ function convertDocToMarkdown(doc, startIndex, title, date) {
 }
 
 // ===== Google Drive URL を安定した CDN 形式に統一 =====
-// 運用者が任意の形式でドライブURLを貼り付けても自動変換される
 function normalizeDriveUrls(markdown) {
-  // パターン1: uc?id=FILE_ID&export=view（順番違いも対応）
   markdown = markdown.replace(
     /https:\/\/drive\.google\.com\/uc\?[^\s\)"]*/g,
     function(match) {
@@ -170,12 +232,10 @@ function normalizeDriveUrls(markdown) {
       return m ? 'https://lh3.googleusercontent.com/d/' + m[1] : match;
     }
   );
-  // パターン2: /file/d/FILE_ID/view または /edit
   markdown = markdown.replace(
     /https:\/\/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)\/[^\s\)"']*/g,
     'https://lh3.googleusercontent.com/d/$1'
   );
-  // パターン3: open?id=FILE_ID
   markdown = markdown.replace(
     /https:\/\/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)[^\s\)"']*/g,
     'https://lh3.googleusercontent.com/d/$1'
@@ -188,7 +248,6 @@ function convertTextToMarkdown(textObj) {
   const fullText = textObj.getText();
   if (!fullText) return '';
 
-  // 書式が変わる位置のインデックス一覧を取得
   const indices = textObj.getTextAttributeIndices();
   if (!indices || indices.length === 0) return fullText;
 
@@ -202,10 +261,9 @@ function convertTextToMarkdown(textObj) {
 
     const bold     = textObj.isBold(start);
     const italic   = textObj.isItalic(start);
-    const color    = textObj.getForegroundColor(start); // "#rrggbb" or null
-    const fontSize = textObj.getFontSize(start);        // pt数 or null（未設定はnull）
+    const color    = textObj.getForegroundColor(start);
+    const fontSize = textObj.getFontSize(start);
 
-    // 黒以外の文字色、または明示的なフォントサイズがある場合は HTML span
     const hasColor = color && color !== '#000000';
     const hasSize  = !!fontSize;
 
@@ -244,21 +302,29 @@ function applyHeading(heading, text) {
 }
 
 // ===== インライン画像を Google ドライブに保存して Markdown img 記法を返す =====
-function saveImageToMarkdown(inlineImage) {
+function saveImageToMarkdown(inlineImage, articleId) {
   const blob = inlineImage.getBlob();
 
-  // 保存先フォルダを取得または作成
-  let folder;
-  const folders = DriveApp.getFoldersByName('PTA-web-images');
-  if (folders.hasNext()) {
-    folder = folders.next();
+  // ルートフォルダ（PTA-web-images）を取得または作成
+  let rootFolder;
+  const rootFolders = DriveApp.getFoldersByName('PTA-web-images');
+  if (rootFolders.hasNext()) {
+    rootFolder = rootFolders.next();
   } else {
-    folder = DriveApp.createFolder('PTA-web-images');
+    rootFolder = DriveApp.createFolder('PTA-web-images');
   }
-  // フォルダを「リンクを知っている人が閲覧可能」に設定
+  rootFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  // 記事 ID ごとのサブフォルダを取得または作成
+  let folder;
+  const subFolders = rootFolder.getFoldersByName(articleId);
+  if (subFolders.hasNext()) {
+    folder = subFolders.next();
+  } else {
+    folder = rootFolder.createFolder(articleId);
+  }
   folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-  // ファイル名を生成（タイムスタンプで重複回避）
   const ext = getMimeExtension(blob.getContentType());
   const filename = 'img-' + new Date().getTime() + '.' + ext;
   blob.setName(filename);
@@ -267,7 +333,6 @@ function saveImageToMarkdown(inlineImage) {
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
   const fileId = file.getId();
-  // lh3.googleusercontent.com は Google の CDN で、uc?id= より安定して画像表示できる
   return '![写真](https://lh3.googleusercontent.com/d/' + fileId + ')';
 }
 
@@ -275,8 +340,8 @@ function saveImageToMarkdown(inlineImage) {
 function getMimeExtension(mimeType) {
   const map = {
     'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/gif': 'gif',
+    'image/png':  'png',
+    'image/gif':  'gif',
     'image/webp': 'webp'
   };
   return map[mimeType] || 'jpg';
@@ -286,7 +351,7 @@ function getMimeExtension(mimeType) {
 function pushToGitHub(filepath, content, commitMessage) {
   const props = PropertiesService.getScriptProperties();
   const owner = props.getProperty('GITHUB_OWNER');
-  const repo = props.getProperty('GITHUB_REPO');
+  const repo  = props.getProperty('GITHUB_REPO');
   const token = props.getProperty('GITHUB_TOKEN');
 
   if (!owner || !repo || !token) {
@@ -298,7 +363,6 @@ function pushToGitHub(filepath, content, commitMessage) {
 
   const apiUrl = 'https://api.github.com/repos/' + owner + '/' + repo + '/contents/' + filepath;
 
-  // 既存ファイルの SHA を取得（更新時に必要）
   let sha;
   const getRes = UrlFetchApp.fetch(apiUrl, {
     headers: { 'Authorization': 'token ' + token },
@@ -308,7 +372,6 @@ function pushToGitHub(filepath, content, commitMessage) {
     sha = JSON.parse(getRes.getContentText()).sha;
   }
 
-  // ファイルを作成または更新
   const payload = {
     message: commitMessage,
     content: Utilities.base64Encode(content, Utilities.Charset.UTF_8),
@@ -334,7 +397,6 @@ function pushToGitHub(filepath, content, commitMessage) {
 
 // ===== ユーティリティ =====
 function slugify(str) {
-  // ファイル名として安全な文字のみ残す（日本語対応）
   return str
     .replace(/[^\w\u3040-\u30FF\u4E00-\u9FFF]/g, '-')
     .replace(/-+/g, '-')
