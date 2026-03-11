@@ -184,9 +184,53 @@ Jekyll は `members.html` から `members/index.html` を生成するため、UR
 
 ---
 
+### セッション 4（2026-03-11）— ヘッダーデザイン改修・セキュリティ強化
+
+#### 実施内容
+
+**ヘッダーにカバー画像・Facebook アイコンを追加**（`9a27ba2`, `15b9320`, `d5eaf8d`）
+
+- `_layouts/default.html` のヘッダーを `.header-left`（タイトル＋FB アイコン）と `.header-img`（カバー画像）の 2 カラム構成に変更
+- Facebook アイコンを絵文字から実画像（Google Drive 経由）に差し替え
+- カバー画像（あじさいの写真）をヘッダー右半分に配置
+- ヘッダー高さを 70px に固定し、カバー画像を `object-fit: cover` で上下トリミング表示
+- ヘッダー背景色を白に変更
+
+```css
+#header { height: 70px; background: white; display: flex; align-items: stretch; }
+#header .header-left { flex: 1; padding: 12px 20px; }
+#header .header-img { width: 50%; overflow: hidden; }
+#header .header-img img { width: 100%; height: 100%; object-fit: cover; }
+```
+
+**会員ページにログイン試行回数制限（ロックアウト）を追加**（`a36f628`）
+
+`localStorage` を使ったクライアントサイドのレート制限を実装。
+
+| 動作 | 内容 |
+|---|---|
+| 1〜3 回失敗 | 「IDまたはパスワードが違います」 |
+| 残り 1〜2 回 | 「あと N 回誤ると一時ロックされます」と警告 |
+| 5 回失敗 | 5 分間ログイン試行をブロック、残り時間を表示 |
+| 5 分後 | 自動解除 |
+| ログイン成功 | 失敗カウントをリセット |
+
+追加した localStorage キー: `members_fails` = `{ count: N, lockedAt: timestamp }`
+
+セキュリティ上の注意: この制限はサイト上での試行のみに有効。`data/members.json` をダウンロードしてオフラインで試行する攻撃には無効（現実的な脅威ではないと判断）。
+
+---
+
 ## 現在の git ログ（最新順・参考）
 
 ```
+a36f628 会員ページに5回失敗で5分ロックアウト機能を追加
+d5eaf8d ヘッダーの高さを70pxに縮小
+15b9320 ヘッダー画像を半幅・上下トリミング表示に変更、背景色を白に変更
+9a27ba2 ヘッダーにカバー画像とFacebookアイコン画像を追加
+6224bdb 会員ページの広報誌リンクを同一タブで開くよう変更
+36653c5 会員ページのログインフォームフラッシュを防止
+39e1ac0 HISTORY.md を更新（セッション3の作業内容を追記）
 （GAS による定期更新コミット多数）
 5e609d3 会員ページにログイン情報の自動保存を追加
 87a33b5 会員ページのセクションタイトル重複を修正
