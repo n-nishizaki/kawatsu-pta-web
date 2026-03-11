@@ -5,6 +5,14 @@ title: 会員専用ページ
 <div id="main">
   <div class="section-title" id="page-title">| 会員専用ページ</div>
 
+  <!-- 保存済みパスワードがある場合はログインフォームを描画前に非表示にする（フラッシュ防止） -->
+  <script>
+    if (localStorage.getItem('members_pw')) {
+      document.head.insertAdjacentHTML('beforeend',
+        '<style id="auto-login-style">#login-area{display:none}</style>');
+    }
+  </script>
+
   <!-- ログインフォーム -->
   <div id="login-area" style="max-width:360px; margin:32px auto; padding:24px; background:#fff; border:1px solid #ddd; border-radius:4px;">
     <p style="margin-bottom:16px; font-size:0.95em; color:#555;">

@@ -107,6 +107,7 @@ async function memberLogin() {
       plain = await decrypt(json.data, pw);
     } catch (e) {
       localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
+      showLoginArea();
       showLoginError('IDまたはパスワードが違います');
       return;
     }
@@ -117,6 +118,7 @@ async function memberLogin() {
       content = JSON.parse(plain);
     } catch (e) {
       localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
+      showLoginArea();
       showLoginError('IDまたはパスワードが違います');
       return;
     }
@@ -126,11 +128,20 @@ async function memberLogin() {
     showContent(content);
 
   } catch (e) {
+    showLoginArea();
     showLoginError('エラーが発生しました: ' + e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'ログイン';
   }
+}
+
+// ===== フラッシュ防止スタイルを除去してログインフォームを表示 =====
+
+function showLoginArea() {
+  var style = document.getElementById('auto-login-style');
+  if (style) style.remove();
+  document.getElementById('login-area').style.display = 'block';
 }
 
 // ===== ログアウト処理 =====
