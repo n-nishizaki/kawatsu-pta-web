@@ -24,23 +24,16 @@ function onOpen() {
   DocumentApp.getUi()
     .createMenu('PTA公開')
     .addItem('このドキュメントを公開する', 'publishDocument')
-    .addSeparator()
-    .addItem('会員限定として公開する', 'publishDocumentMembersOnly')
     .addToUi();
 }
 
-// ===== 公開（通常） =====
+// ===== 公開 =====
 function publishDocument() {
-  _publish(false);
-}
-
-// ===== 公開（会員限定） =====
-function publishDocumentMembersOnly() {
-  _publish(true);
+  _publish();
 }
 
 // ===== メインの公開処理 =====
-function _publish(membersOnly) {
+function _publish() {
   const ui = DocumentApp.getUi();
   const doc = DocumentApp.getActiveDocument();
 
@@ -69,7 +62,6 @@ function _publish(membersOnly) {
     '以下の内容でWebサイトに公開します。よろしいですか？\n\n' +
     'タイトル: ' + title + '\n' +
     '日付: ' + date + '\n' +
-    (membersOnly ? '種別: 会員限定\n' : '') +
     '\n※ドキュメント内の画像はGoogle ドライブに自動保存されます。\n' +
     '※公開後は数分でサイトに反映されます。';
 
@@ -85,7 +77,7 @@ function _publish(membersOnly) {
   const filepath = '_posts/' + filename;
 
   try {
-    const markdown = convertDocToMarkdown(doc, contentStartIndex, title, date, membersOnly);
+    const markdown = convertDocToMarkdown(doc, contentStartIndex, title, date);
     pushToGitHub(filepath, markdown, title + ' を公開');
     ui.alert(
       '公開完了',
@@ -99,7 +91,7 @@ function _publish(membersOnly) {
 }
 
 // ===== Google ドキュメントを Markdown（Jekyll フロントマター付き）に変換 =====
-function convertDocToMarkdown(doc, startIndex, title, date, membersOnly) {
+function convertDocToMarkdown(doc, startIndex, title, date) {
   const body = doc.getBody();
   let markdown = '';
 
@@ -107,7 +99,6 @@ function convertDocToMarkdown(doc, startIndex, title, date, membersOnly) {
   markdown += '---\n';
   markdown += 'title: "' + title.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"\n';
   markdown += 'date: ' + date + '\n';
-  if (membersOnly) markdown += 'members_only: true\n';
   markdown += 'layout: post\n';
   markdown += '---\n\n';
 

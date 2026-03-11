@@ -18,7 +18,6 @@ page_title: 松江市立川津小学校 PTA ホームページ
       <span class="date">{{ post.date | date: "%Y-%m-%d" }}</span>
       <span class="title">
         <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
-        {% if post.members_only %}<span class="badge-members">会員限定</span>{% endif %}
         {% assign post_ts = post.date | date: '%s' | plus: 0 %}
         {% if post_ts > two_weeks_ago %}<span class="badge-new">NEW</span>{% endif %}
       </span>

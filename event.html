@@ -23,7 +23,6 @@ title: お知らせ
           <span class="day">{{ post.date | date: "%-d日" }}</span>
           <span class="title">
             <a href="{{ post.url | relative_url }}">{{ post.title }}</a>
-            {% if post.members_only %}<span class="badge-members">会員限定</span>{% endif %}
           </span>
         </li>
         {% endfor %}
