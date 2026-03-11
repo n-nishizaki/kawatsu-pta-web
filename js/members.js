@@ -19,7 +19,40 @@ function getCurrentSection() {
 }
 
 // ===== localStorage キー =====
-var STORAGE_KEY = 'members_pw';
+var STORAGE_KEY      = 'members_pw';
+var FAIL_KEY         = 'members_fails';
+var MAX_FAILS        = 5;
+var LOCKOUT_MS       = 5 * 60 * 1000; // 5分
+
+// ===== ロックアウト管理 =====
+
+function getFailState() {
+  try { return JSON.parse(localStorage.getItem(FAIL_KEY)) || { count: 0, lockedAt: null }; }
+  catch (e) { return { count: 0, lockedAt: null }; }
+}
+
+function isLockedOut() {
+  var s = getFailState();
+  if (s.count < MAX_FAILS) return false;
+  return s.lockedAt && (Date.now() - s.lockedAt) < LOCKOUT_MS;
+}
+
+function remainingSeconds() {
+  var s = getFailState();
+  if (!s.lockedAt) return 0;
+  return Math.ceil((LOCKOUT_MS - (Date.now() - s.lockedAt)) / 1000);
+}
+
+function recordFailure() {
+  var s = getFailState();
+  s.count += 1;
+  if (s.count >= MAX_FAILS) s.lockedAt = Date.now();
+  localStorage.setItem(FAIL_KEY, JSON.stringify(s));
+}
+
+function clearFailState() {
+  localStorage.removeItem(FAIL_KEY);
+}
 
 // DOMContentLoaded: Enter キー対応 + ページタイトル初期化 + 自動ログイン
 document.addEventListener('DOMContentLoaded', function () {
@@ -64,13 +97,22 @@ async function decrypt(base64, password) {
 // ===== ログイン処理 =====
 
 async function memberLogin() {
+  // ロックアウト中チェック
+  if (isLockedOut()) {
+    var sec = remainingSeconds();
+    var min = Math.ceil(sec / 60);
+    showLoginError('入力誤りが続いたため、あと約' + min + '分後に再試行できます');
+    return;
+  }
+
   var id = document.getElementById('member-id').value.trim();
   var pw = document.getElementById('member-pw').value.trim();
   var btn = document.getElementById('login-btn');
 
   // ID チェック（非秘密な識別子）
   if (id !== 'PTA') {
-    showLoginError('IDまたはパスワードが違います');
+    recordFailure();
+    showLoginError(loginErrorMessage());
     return;
   }
 
@@ -107,8 +149,9 @@ async function memberLogin() {
       plain = await decrypt(json.data, pw);
     } catch (e) {
       localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
+      recordFailure();
       showLoginArea();
-      showLoginError('IDまたはパスワードが違います');
+      showLoginError(loginErrorMessage());
       return;
     }
 
@@ -118,12 +161,14 @@ async function memberLogin() {
       content = JSON.parse(plain);
     } catch (e) {
       localStorage.removeItem(STORAGE_KEY); // 保存済みが無効なら削除
+      recordFailure();
       showLoginArea();
-      showLoginError('IDまたはパスワードが違います');
+      showLoginError(loginErrorMessage());
       return;
     }
 
-    // 認証成功 → パスワードを保存してコンテンツ表示
+    // 認証成功 → 失敗カウントをリセットしてパスワードを保存してコンテンツ表示
+    clearFailState();
     localStorage.setItem(STORAGE_KEY, pw);
     showContent(content);
 
@@ -211,6 +256,19 @@ function showContent(content) {
 }
 
 // ===== ヘルパー =====
+
+function loginErrorMessage() {
+  if (isLockedOut()) {
+    var min = Math.ceil(remainingSeconds() / 60);
+    return '入力誤りが続いたため、あと約' + min + '分後に再試行できます';
+  }
+  var s = getFailState();
+  var left = MAX_FAILS - s.count;
+  if (left > 0 && left <= 2) {
+    return 'IDまたはパスワードが違います（あと' + left + '回誤ると一時ロックされます）';
+  }
+  return 'IDまたはパスワードが違います';
+}
 
 function showLoginError(msg) {
   var el = document.getElementById('login-error');
