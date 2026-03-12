@@ -5,22 +5,21 @@
  * 1. Google ドキュメントを開く
  * 2. メニューに「PTA公開」が表示される
  * 3. 「新規記事テンプレートを作成」でひな形ドキュメントを作成
- * 4. タイトル・ID・公開日・本文を入力し「このドキュメントを公開する」をクリック
+ * 4. タイトル・公開日・本文を入力し「このドキュメントを公開する」をクリック
  *
  * 【ドキュメントの構成】
- * ┌──────────┬──────────────────┐
- * │ ID       │ 20260122-oyako   │ ← 記事ごとに一意な識別子（画像フォルダ名にも使用）
- * ├──────────┼──────────────────┤
- * │ 公開日   │ 2026-01-22       │ ← サイトに表示される日付（YYYY-MM-DD）
- * ├──────────┼──────────────────┤
- * │ 更新日   │                  │ ← 記事を修正した日（初回は空欄でOK）
- * └──────────┴──────────────────┘
+ * ┌────────────────┬──────────────────┐
+ * │ ID（自動入力） │ 20260312143055   │ ← 公開時に自動採番。空欄のままにしておく。
+ * ├────────────────┼──────────────────┤
+ * │ 公開日         │ 2026-01-22       │ ← サイトに表示される日付（YYYY-MM-DD）
+ * ├────────────────┼──────────────────┤
+ * │ 更新日         │                  │ ← 記事を修正した日（初回は空欄でOK）
+ * └────────────────┴──────────────────┘
  * （空行）
  * ここから本文...
  *
  * 【初期設定】
  * config.gs に GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO を入力してください。
- * config.gs は .gitignore で管理対象外になっています。
  */
 
 // ===== メニューを追加 =====
@@ -30,6 +29,8 @@ function onOpen() {
     .addItem('新規記事テンプレートを作成', 'createNewArticle')
     .addSeparator()
     .addItem('このドキュメントを公開する', 'publishDocument')
+    .addSeparator()
+    .addItem('この記事を削除する', 'deleteArticle')
     .addToUi();
 }
 
@@ -42,9 +43,9 @@ function createNewArticle() {
 
   // 公開情報テーブル
   const table = body.appendTable([
-    ['ID',    ''],
-    ['公開日', today],
-    ['更新日', '']
+    ['ID（自動入力）', ''],
+    ['公開日',         today],
+    ['更新日',         '']
   ]);
   // ラベル列をグレー背景に
   for (let i = 0; i < 3; i++) {
@@ -60,8 +61,7 @@ function createNewArticle() {
     '以下の URL を開いて記事を書いてください。\n\n' + doc.getUrl() +
     '\n\n【記入方法】\n' +
     '・ドキュメントのファイル名 → 記事タイトルになります\n' +
-    '・ID: 記事を識別する短い名前（例: 20260122-oyako）\n' +
-    '  ※半角英数字とハイフンのみ推奨。画像フォルダ名にも使われます。\n' +
+    '・ID: 公開時に自動入力されます（空欄のままにしてください）\n' +
     '・公開日: サイトに表示する日付（YYYY-MM-DD 形式）\n' +
     '・更新日: 記事を修正した場合に記入。初回は空欄でOK。',
     ui.ButtonSet.OK
@@ -81,37 +81,46 @@ function _publish() {
   const body = doc.getBody();
 
   // ドキュメント先頭のテーブルから公開情報を読み取る
-  let articleId, publishDate, updateDate;
+  let articleId, publishDate, updateDate, headerTable;
   const firstElement = body.getChild(0);
 
   if (firstElement.getType() === DocumentApp.ElementType.TABLE) {
-    const table = firstElement.asTable();
-    articleId  = table.getCell(0, 1).getText().trim();
-    publishDate = table.getCell(1, 1).getText().trim();
-    updateDate  = table.getCell(2, 1).getText().trim();
+    headerTable = firstElement.asTable();
+    articleId   = headerTable.getCell(0, 1).getText().trim();
+    publishDate = headerTable.getCell(1, 1).getText().trim();
+    updateDate  = headerTable.getCell(2, 1).getText().trim();
   } else {
     // 旧形式（1行目に日付）へのフォールバック
-    const firstPara = body.getParagraphs()[0].getText().trim();
-    publishDate = /^\d{4}-\d{2}-\d{2}$/.test(firstPara)
-      ? firstPara
+    const firstText = body.getChild(0).asParagraph
+      ? body.getChild(0).asParagraph().getText().trim()
+      : '';
+    publishDate = /^\d{4}-\d{2}-\d{2}$/.test(firstText)
+      ? firstText
       : Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-    articleId  = slugify(title);
+    articleId  = '';
     updateDate = '';
+    headerTable = null;
   }
 
   // バリデーション
-  if (!articleId) {
-    ui.alert('エラー', 'ID が入力されていません。テーブルの ID 欄を入力してください。', ui.ButtonSet.OK);
-    return;
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(publishDate)) {
     ui.alert('エラー', '公開日の形式が正しくありません。YYYY-MM-DD で入力してください（例: 2026-01-22）。', ui.ButtonSet.OK);
     return;
   }
 
+  const isNew = !articleId;
+
+  // 新規の場合：ID を自動採番
+  if (isNew) {
+    articleId = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMddHHmmss');
+  }
+
+  const filename = publishDate + '-' + articleId + '.md';
+  const filepath = '_posts/' + filename;
+
   // 確認ダイアログ
   const confirmMsg =
-    '以下の内容でWebサイトに公開します。よろしいですか？\n\n' +
+    (isNew ? '【新規公開】' : '【上書き更新】') + '\n\n' +
     'タイトル: ' + title + '\n' +
     'ID: ' + articleId + '\n' +
     '公開日: ' + publishDate + '\n' +
@@ -125,21 +134,154 @@ function _publish() {
     return;
   }
 
-  const safeId  = slugify(articleId);
-  const filename = publishDate + '-' + safeId + '.md';
-  const filepath = '_posts/' + filename;
-
   try {
-    const markdown = convertDocToMarkdown(doc, title, publishDate, updateDate, safeId);
-    pushToGitHub(filepath, markdown, title + ' を公開');
+    // 更新の場合：旧画像を削除してからMarkdown変換（新画像を保存）
+    if (!isNew) {
+      clearDriveFolder(articleId);
+    }
+
+    // Markdown 変換（画像は新しくDriveに保存される）
+    const markdown = convertDocToMarkdown(doc, title, publishDate, updateDate, articleId);
+
+    // 更新の場合：公開日が変わった旧ファイルを削除
+    if (!isNew) {
+      const existingFile = findGitHubFileById(articleId);
+      if (existingFile && existingFile.path !== filepath) {
+        deleteFromGitHub(existingFile.path, existingFile.sha, '旧記事ファイルを削除: ' + title);
+      }
+    }
+
+    // GitHub に push
+    pushToGitHub(filepath, markdown, (isNew ? '記事を公開: ' : '記事を更新: ') + title);
+
+    // 新規の場合：採番した ID をドキュメントのヘッダーテーブルに書き戻す
+    if (isNew && headerTable) {
+      headerTable.getCell(0, 1).setText(articleId);
+    }
+
     ui.alert(
       '公開完了',
-      '「' + title + '」を公開しました！\n数分後にサイトに反映されます。\n\nファイル: ' + filename,
+      '「' + title + '」を' + (isNew ? '公開' : '更新') + 'しました！\n' +
+      '数分後にサイトに反映されます。\n\nファイル: ' + filename,
       ui.ButtonSet.OK
     );
   } catch (e) {
     ui.alert('エラー', '公開に失敗しました。\n\nエラー内容:\n' + e.message, ui.ButtonSet.OK);
     console.error(e);
+  }
+}
+
+// ===== 記事の削除 =====
+function deleteArticle() {
+  const ui = DocumentApp.getUi();
+  const doc = DocumentApp.getActiveDocument();
+  const body = doc.getBody();
+
+  // ヘッダーテーブルから ID を取得
+  const firstElement = body.getChild(0);
+  if (firstElement.getType() !== DocumentApp.ElementType.TABLE) {
+    ui.alert('エラー', 'ヘッダーテーブルが見つかりません。', ui.ButtonSet.OK);
+    return;
+  }
+
+  const articleId = firstElement.asTable().getCell(0, 1).getText().trim();
+  if (!articleId) {
+    ui.alert('エラー', 'ID が空です。このドキュメントはまだ公開されていません。', ui.ButtonSet.OK);
+    return;
+  }
+
+  const result = ui.alert(
+    '記事の削除',
+    '「' + doc.getName() + '」を削除します。よろしいですか？\n\n' +
+    '・GitHub から記事ファイルを削除します\n' +
+    '・画像フォルダ（PTA-web-images/' + articleId + '）を削除します\n' +
+    '・このドキュメントをゴミ箱に移動します\n\n' +
+    '※ドキュメントはゴミ箱から30日間復元できます。',
+    ui.ButtonSet.YES_NO
+  );
+  if (result !== ui.Button.YES) return;
+
+  try {
+    // 1. GitHub のファイルを削除
+    const existingFile = findGitHubFileById(articleId);
+    if (existingFile) {
+      deleteFromGitHub(existingFile.path, existingFile.sha, '記事を削除: ' + doc.getName());
+    }
+
+    // 2. Drive の画像フォルダをゴミ箱へ
+    deleteDriveFolder(articleId);
+
+    // 3. ドキュメントをゴミ箱へ（最後に実行）
+    DriveApp.getFileById(doc.getId()).setTrashed(true);
+
+  } catch (e) {
+    ui.alert('エラー', '削除中にエラーが発生しました。\n\n' + e.message, ui.ButtonSet.OK);
+  }
+}
+
+// ===== GitHub の _posts/ を ID で検索してファイル情報を返す =====
+function findGitHubFileById(articleId) {
+  const url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO +
+              '/contents/_posts?ref=' + GITHUB_BRANCH;
+  const res = UrlFetchApp.fetch(url, {
+    headers: { 'Authorization': 'token ' + GITHUB_TOKEN },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) return null;
+
+  const files = JSON.parse(res.getContentText());
+  for (const file of files) {
+    if (file.name.indexOf(articleId) !== -1) {
+      return { path: file.path, sha: file.sha };
+    }
+  }
+  return null;
+}
+
+// ===== GitHub からファイルを削除 =====
+function deleteFromGitHub(filepath, sha, commitMessage) {
+  const url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO +
+              '/contents/' + filepath;
+  const res = UrlFetchApp.fetch(url, {
+    method: 'delete',
+    headers: {
+      'Authorization': 'token ' + GITHUB_TOKEN,
+      'Content-Type': 'application/json'
+    },
+    payload: JSON.stringify({ message: commitMessage, sha: sha, branch: GITHUB_BRANCH }),
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) {
+    throw new Error('GitHub 削除エラー: HTTP ' + code + '\n' + res.getContentText());
+  }
+}
+
+// ===== Drive の画像フォルダ内ファイルをすべてゴミ箱へ（フォルダ自体は残す） =====
+function clearDriveFolder(articleId) {
+  const rootFolders = DriveApp.getFoldersByName('PTA-web-images');
+  if (!rootFolders.hasNext()) return;
+  const rootFolder = rootFolders.next();
+
+  const subFolders = rootFolder.getFoldersByName(articleId);
+  if (!subFolders.hasNext()) return;
+  const folder = subFolders.next();
+
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    files.next().setTrashed(true);
+  }
+}
+
+// ===== Drive の画像フォルダをゴミ箱へ =====
+function deleteDriveFolder(articleId) {
+  const rootFolders = DriveApp.getFoldersByName('PTA-web-images');
+  if (!rootFolders.hasNext()) return;
+  const rootFolder = rootFolders.next();
+
+  const subFolders = rootFolder.getFoldersByName(articleId);
+  if (subFolders.hasNext()) {
+    subFolders.next().setTrashed(true);
   }
 }
 
@@ -355,8 +497,10 @@ function pushToGitHub(filepath, content, commitMessage) {
     );
   }
 
-  const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + filepath;
+  const apiUrl = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO +
+                 '/contents/' + filepath;
 
+  // 既存ファイルの sha を取得（上書き更新に必要）
   let sha;
   const getRes = UrlFetchApp.fetch(apiUrl, {
     headers: { 'Authorization': 'token ' + GITHUB_TOKEN },
@@ -387,13 +531,4 @@ function pushToGitHub(filepath, content, commitMessage) {
   if (code !== 200 && code !== 201) {
     throw new Error('GitHub API エラー: HTTP ' + code + '\n' + putRes.getContentText());
   }
-}
-
-// ===== ユーティリティ =====
-function slugify(str) {
-  return str
-    .replace(/[^\w\u3040-\u30FF\u4E00-\u9FFF]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 50);
 }
