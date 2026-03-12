@@ -23,6 +23,8 @@ function onOpen() {
     .addItem('このドキュメントを公開する', 'publishDocument')
     .addSeparator()
     .addItem('この記事を削除する', 'deleteArticle')
+    .addSeparator()
+    .addItem('孤立記事をクリーンアップ', 'cleanupOrphanedArticles')
     .addToUi();
 }
 
@@ -215,6 +217,86 @@ function deleteArticle() {
 
   } catch (e) {
     ui.alert('エラー', '削除中にエラーが発生しました。\n\n' + e.message, ui.ButtonSet.OK);
+  }
+}
+
+// ===== 孤立記事のクリーンアップ =====
+// GitHub _posts/ にあるファイルの docId に対応する Google Doc が
+// 存在しない（または削除済み・ゴミ箱入り）場合に GitHub と Drive から削除する
+function cleanupOrphanedArticles() {
+  const ui = DocumentApp.getUi();
+
+  // GitHub から _posts/ のファイル一覧を取得
+  const url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO +
+              '/contents/_posts?ref=' + GITHUB_BRANCH;
+  const res = UrlFetchApp.fetch(url, {
+    headers: { 'Authorization': 'token ' + GITHUB_TOKEN },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() !== 200) {
+    ui.alert('エラー', 'GitHub のファイル一覧取得に失敗しました。\n\nHTTP ' + res.getResponseCode(), ui.ButtonSet.OK);
+    return;
+  }
+
+  const files = JSON.parse(res.getContentText());
+  const orphaned = [];
+
+  for (const file of files) {
+    // ファイル名から docId を抽出（yyyy-mm-dd-{docId}.md）
+    const m = file.name.match(/^\d{4}-\d{2}-\d{2}-(.+)\.md$/);
+    if (!m) continue;
+    const docId = m[1];
+
+    // Doc が存在するか確認
+    // ・DriveApp.getFileById() が例外 → 完全に削除済み
+    // ・取得できても isTrashed() が true  → ゴミ箱入り
+    let isOrphaned = false;
+    try {
+      const driveFile = DriveApp.getFileById(docId);
+      if (driveFile.isTrashed()) isOrphaned = true;
+    } catch (e) {
+      isOrphaned = true;
+    }
+
+    if (isOrphaned) {
+      orphaned.push({ name: file.name, path: file.path, sha: file.sha, docId: docId });
+    }
+  }
+
+  if (orphaned.length === 0) {
+    ui.alert('確認完了', '孤立した記事はありませんでした。', ui.ButtonSet.OK);
+    return;
+  }
+
+  // 削除対象を一覧表示して確認
+  const nameList = orphaned.map(function(f) { return '・' + f.name; }).join('\n');
+  const result = ui.alert(
+    '孤立記事の削除',
+    '対応するドキュメントが削除済み（またはゴミ箱入り）の記事が ' + orphaned.length + ' 件あります。\n\n' +
+    nameList + '\n\n' +
+    'GitHub と Drive の画像フォルダから削除しますか？',
+    ui.ButtonSet.YES_NO
+  );
+  if (result !== ui.Button.YES) return;
+
+  const errors = [];
+  for (const f of orphaned) {
+    try {
+      deleteFromGitHub(f.path, f.sha, '孤立記事を削除: ' + f.name);
+      deleteDriveFolder(f.docId);
+    } catch (e) {
+      errors.push(f.name + ': ' + e.message);
+    }
+  }
+
+  if (errors.length > 0) {
+    ui.alert(
+      '一部エラー',
+      (orphaned.length - errors.length) + ' 件削除、' + errors.length + ' 件失敗しました。\n\n' + errors.join('\n'),
+      ui.ButtonSet.OK
+    );
+  } else {
+    ui.alert('削除完了', orphaned.length + ' 件の孤立記事を削除しました。', ui.ButtonSet.OK);
   }
 }
 
