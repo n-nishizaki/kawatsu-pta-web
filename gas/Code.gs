@@ -8,15 +8,12 @@
  * 4. タイトル・公開日・本文を入力し「このドキュメントを公開する」をクリック
  *
  * 【ドキュメントの構成】
- * ┌────────────────┬──────────────────┐
- * │ ID（自動入力） │ 20260312143055   │ ← 公開時に自動採番。空欄のままにしておく。
- * ├────────────────┼──────────────────┤
- * │ 公開日         │ 2026-01-22       │ ← サイトに表示される日付（YYYY-MM-DD）
- * ├────────────────┼──────────────────┤
- * │ 更新日         │                  │ ← 記事を修正した日（初回は空欄でOK）
- * └────────────────┴──────────────────┘
- * （空行）
- * ここから本文...
+ * ページヘッダー（表示形式 → ヘッダーとフッター）に以下を記入:
+ *   ID：（自動入力）
+ *   公開日：2026-01-22
+ *   更新日：
+ *
+ * 本文はページヘッダーの下から自由に記述...
  *
  * 【初期設定】
  * config.gs に GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO を入力してください。
@@ -38,21 +35,13 @@ function onOpen() {
 function createNewArticle() {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const doc = DocumentApp.create('【タイトルを入力】');
+
+  // ページヘッダーに公開情報を書き込む
+  writeDocHeader(doc, '', today, '');
+
+  // 本文の初期テキスト
   const body = doc.getBody();
   body.clear();
-
-  // 公開情報テーブル
-  const table = body.appendTable([
-    ['ID（自動入力）', ''],
-    ['公開日',         today],
-    ['更新日',         '']
-  ]);
-  // ラベル列をグレー背景に
-  for (let i = 0; i < 3; i++) {
-    table.getCell(i, 0).setBackgroundColor('#eeeeee');
-  }
-
-  body.appendParagraph('');
   body.appendParagraph('ここに本文を書いてください。');
 
   const ui = DocumentApp.getUi();
@@ -61,9 +50,10 @@ function createNewArticle() {
     '以下の URL を開いて記事を書いてください。\n\n' + doc.getUrl() +
     '\n\n【記入方法】\n' +
     '・ドキュメントのファイル名 → 記事タイトルになります\n' +
-    '・ID: 公開時に自動入力されます（空欄のままにしてください）\n' +
-    '・公開日: サイトに表示する日付（YYYY-MM-DD 形式）\n' +
-    '・更新日: 記事を修正した場合に記入。初回は空欄でOK。',
+    '・ID: 公開時に自動入力されます（ヘッダーに表示）\n' +
+    '・公開日: ページヘッダーの「公開日：」欄に YYYY-MM-DD 形式で入力\n' +
+    '・更新日: 記事を修正した場合に記入。初回は空欄でOK。\n\n' +
+    '※ページヘッダーは「表示形式」→「ヘッダーとフッター」で編集できます。',
     ui.ButtonSet.OK
   );
 }
@@ -80,27 +70,11 @@ function _publish() {
   const title = doc.getName();
   const body = doc.getBody();
 
-  // ドキュメント先頭のテーブルから公開情報を読み取る
-  let articleId, publishDate, updateDate, headerTable;
-  const firstElement = body.getChild(0);
-
-  if (firstElement.getType() === DocumentApp.ElementType.TABLE) {
-    headerTable = firstElement.asTable();
-    articleId   = headerTable.getCell(0, 1).getText().trim();
-    publishDate = headerTable.getCell(1, 1).getText().trim();
-    updateDate  = headerTable.getCell(2, 1).getText().trim();
-  } else {
-    // 旧形式（1行目に日付）へのフォールバック
-    const firstText = body.getChild(0).asParagraph
-      ? body.getChild(0).asParagraph().getText().trim()
-      : '';
-    publishDate = /^\d{4}-\d{2}-\d{2}$/.test(firstText)
-      ? firstText
-      : Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-    articleId  = '';
-    updateDate = '';
-    headerTable = null;
-  }
+  // ページヘッダーから公開情報を読み取る
+  const headerInfo = readDocHeader(doc);
+  let articleId   = headerInfo.articleId;
+  let publishDate = headerInfo.publishDate;
+  let updateDate  = headerInfo.updateDate;
 
   // バリデーション
   if (!/^\d{4}-\d{2}-\d{2}$/.test(publishDate)) {
@@ -135,10 +109,10 @@ function _publish() {
   }
 
   try {
-    // 新規の場合：採番した ID をドキュメントのヘッダーテーブルに先に書き戻す
+    // 新規の場合：採番した ID をページヘッダーに先に書き戻す
     // （GitHub プッシュが失敗しても ID が保持されるよう、最初に実行）
-    if (isNew && headerTable) {
-      headerTable.getCell(0, 1).setText(articleId);
+    if (isNew) {
+      writeDocHeader(doc, articleId, publishDate, updateDate);
     }
 
     // 更新の場合：旧画像を削除してからMarkdown変換（新画像を保存）
@@ -178,14 +152,8 @@ function deleteArticle() {
   const doc = DocumentApp.getActiveDocument();
   const body = doc.getBody();
 
-  // ヘッダーテーブルから ID を取得
-  const firstElement = body.getChild(0);
-  if (firstElement.getType() !== DocumentApp.ElementType.TABLE) {
-    ui.alert('エラー', 'ヘッダーテーブルが見つかりません。', ui.ButtonSet.OK);
-    return;
-  }
-
-  const articleId = firstElement.asTable().getCell(0, 1).getText().trim();
+  // ページヘッダーから ID を取得
+  const articleId = readDocHeader(doc).articleId;
   if (!articleId) {
     ui.alert('エラー', 'ID が空です。このドキュメントはまだ公開されていません。', ui.ButtonSet.OK);
     return;
@@ -218,6 +186,34 @@ function deleteArticle() {
   } catch (e) {
     ui.alert('エラー', '削除中にエラーが発生しました。\n\n' + e.message, ui.ButtonSet.OK);
   }
+}
+
+// ===== ページヘッダーから公開情報を読み取る =====
+function readDocHeader(doc) {
+  const result = { articleId: '', publishDate: '', updateDate: '' };
+  const header = doc.getHeader();
+  if (!header) return result;
+
+  const text = header.getText();
+  const idMatch      = text.match(/ID[：:]\s*(\S+)/);
+  const dateMatch    = text.match(/公開日[：:]\s*(\d{4}-\d{2}-\d{2})/);
+  const updateMatch  = text.match(/更新日[：:]\s*(\S*)/);
+
+  result.articleId   = idMatch     ? idMatch[1].trim()    : '';
+  result.publishDate = dateMatch   ? dateMatch[1].trim()  : '';
+  result.updateDate  = updateMatch ? updateMatch[1].trim(): '';
+  return result;
+}
+
+// ===== ページヘッダーに公開情報を書き込む =====
+function writeDocHeader(doc, articleId, publishDate, updateDate) {
+  let header = doc.getHeader();
+  if (!header) header = doc.addHeader();
+
+  header.clear();
+  header.appendParagraph('ID：' + articleId);
+  header.appendParagraph('公開日：' + publishDate);
+  header.appendParagraph('更新日：' + (updateDate || ''));
 }
 
 // ===== GitHub の _posts/ を ID で検索してファイル情報を返す =====
@@ -299,30 +295,9 @@ function convertDocToMarkdown(doc, title, publishDate, updateDate, articleId) {
   markdown += 'layout: post\n';
   markdown += '---\n\n';
 
-  // 本文の開始インデックスを決定（ヘッダーテーブルと空行をスキップ）
+  // 本文の開始インデックス（ページヘッダー方式ではスキップ不要）
   const numElements = body.getNumChildren();
-  const firstType = body.getChild(0).getType();
-  let startIdx = 0;
-
-  if (firstType === DocumentApp.ElementType.TABLE) {
-    // 新形式: テーブルとその直後の空行をスキップ
-    startIdx = 1;
-    while (startIdx < numElements) {
-      const el = body.getChild(startIdx);
-      if (el.getType() === DocumentApp.ElementType.PARAGRAPH &&
-          !el.asParagraph().getText().trim()) {
-        startIdx++;
-      } else {
-        break;
-      }
-    }
-  } else {
-    // 旧形式: 1行目が日付なら読み飛ばす
-    const firstText = body.getChild(0).asParagraph
-      ? body.getChild(0).asParagraph().getText().trim()
-      : '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(firstText)) startIdx = 1;
-  }
+  const startIdx = 0;
 
   // ドキュメント本文を段落単位で変換
   for (let i = startIdx; i < numElements; i++) {
