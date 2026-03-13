@@ -206,6 +206,20 @@ def github_push(path, content_bytes, message):
 # 記事一覧取得
 # ──────────────────────────────────────────────────────────────────────────────
 
+def get_saved_images(date_raw):
+    """
+    GitHub の assets/images/migrated/{date_raw}/ に保存済みのファイル名セットを返す。
+    ディレクトリが存在しない場合は空セット。
+    """
+    resp = requests.get(
+        _api(f'{IMAGE_DIR}/{date_raw}'), headers=_headers(),
+        params={'ref': config.GITHUB_BRANCH}, timeout=15
+    )
+    if resp.status_code == 200:
+        return {f['name'] for f in resp.json()}
+    return set()
+
+
 def get_migrated_posts():
     """GitHub _posts/ から migrated-*.md のファイル情報リストを返す（日付昇順）"""
     resp = requests.get(
@@ -247,6 +261,10 @@ def process_post(file_info, dry_run=False):
     ok_count = fail_count = 0
     new_content = content
 
+    # 記事フォルダの保存済み画像を一括取得（記事内の画像は同じ date_raw を持つ）
+    first_date_raw = matches[0][1]
+    saved = set() if dry_run else get_saved_images(first_date_raw)
+
     for filename, date_raw in matches:
         old_url = OLD_BASE + filename
 
@@ -254,6 +272,17 @@ def process_post(file_info, dry_run=False):
             # ドライランは URL の確認のみ
             print(f'      → {filename}')
             ok_count += 1
+            continue
+
+        # ── 保存済みチェック（再実行時のスキップ） ──
+        stem = filename.rsplit('.', 1)[0]
+        saved_name = next((c for c in [stem + '.jpg', filename] if c in saved), None)
+        if saved_name:
+            asset_path = f'{IMAGE_DIR}/{date_raw}/{saved_name}'
+            new_url    = f'{config.PAGES_BASE_URL}/{asset_path}'
+            new_content = new_content.replace(OLD_BASE + filename, new_url)
+            ok_count += 1
+            print(f'      ✓ スキップ（保存済み）: {saved_name}')
             continue
 
         # ── a. 旧サーバからダウンロード ──
