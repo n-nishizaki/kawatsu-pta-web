@@ -409,14 +409,14 @@ function convertDocToMarkdown(doc, title, publishDate, articleId) {
           // 1枚だけ → 通常の Markdown 画像記法
           markdown += imageGroup[0] + '\n\n';
         } else {
-          // 複数枚 → flexbox で横並び表示
+          // 複数枚 → photo-grid で3列表示
           const imgTags = imageGroup.map(function(md) {
             const m = md.match(/!\[[^\]]*\]\(([^)]+)\)/);
             return m
-              ? '<img src="' + m[1] + '" alt="写真" style="flex:1;min-width:0;max-width:100%;">'
+              ? '<img src="' + m[1] + '" alt="写真">'
               : md;
           });
-          markdown += '<div style="display:flex;gap:8px;flex-wrap:wrap;">\n' +
+          markdown += '<div class="photo-grid">\n' +
                       imgTags.join('\n') + '\n</div>\n\n';
         }
         imageGroup = [];
