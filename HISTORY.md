@@ -345,9 +345,65 @@ PTA公開
 
 ---
 
+### セッション 7（2026-03-13）— 旧サイト記事マイグレーション
+
+#### 実施内容
+
+**マイグレーションツール作成（Step 1: `tools/migrate.py`）**
+
+旧サイト（http://kawatsupta.byonia.net/report/）の全記事を Jekyll Markdown に変換して一括 push。
+
+- `event.html` を起点に記事リンクを収集
+- 各記事を BeautifulSoup でパース → フロントマター付き Markdown に変換
+- `--dry-run` / `--from` / `--to` フィルターオプションあり
+- 出力: `_posts/YYYY-MM-DD-migrated-YYYYMMDD.md`（`migrated: true` フラグ付き）
+- GAS `cleanupOrphanedArticles()` が migrated- プレフィックスをスキップするよう修正
+
+**マイグレーションツール作成（Step 2: `tools/migrate_images.py`）**
+
+旧サーバーの画像を GitHub リポジトリに移動し、MD 内の URL を差し替える。
+
+技術的なポイント:
+- Pillow で画像圧縮（最大 1200px・JPEG 品質 80%）→ 旧サーバー画像合計 ~1.65GB → 圧縮後 ~138MB（容量問題を解消）
+- 透過 PNG はそのまま保存、それ以外は JPEG 変換
+- GitHub Contents API 経由で `assets/images/migrated/{YYYYMMDD}/` に push
+- MD ファイルの旧サーバー URL を GitHub Pages URL に差し替えて再 push
+- 503 レートリミット対策: ダウンロード間 1.5 秒スリープ + `[10, 30]` 秒リトライ
+- 中断リトライ時の高速化: `get_saved_images()` で GitHub のフォルダ一覧を取得し、保存済み画像をスキップ
+- 画像 push と MD 更新を 1 コミットに集約してデプロイ頻度を削減（`perf` コミット）
+
+設定ファイル:
+- `tools/config.py`（`.gitignore` 除外済み） — Token・リポジトリ名・`PAGES_BASE_URL` 等を記述
+- `tools/config.py.example` — テンプレート
+
+**写真グリッドを CSS columns レイアウトに変更**（`635e9ff`, `ebeb573`）
+
+旧レイアウト（`display:flex` インラインスタイル）を廃止し、CSS columns 方式に統一。
+
+| 画面幅 | 列数 |
+|---|---|
+| PC（> 768px） | 3列 |
+| タブレット（≤ 768px） | 2列 |
+| スマホ（≤ 480px） | 1列 |
+
+- トリミングなし — 縦写真も自然にカラムに収まる
+- 既存 93 記事を Python スクリプトで一括置換
+- `tools/migrate.py` と `gas/Code.gs` も同じ出力形式に統一
+
+**更新情報を3行固定・スクロール表示に変更**（`db6692a`）
+
+- ホームの更新情報エリアを 3 行固定高さ + `overflow-y: auto` でスクロール対応
+
+---
+
 ## 現在の git ログ（最新順・参考）
 
 ```
+ebeb573 fix(gas): 複数画像の出力を photo-grid クラスに統一
+635e9ff feat: 写真グリッドを CSS columns 3列レイアウトに変更
+c403b2f perf(migrate): 画像+MD を1コミットに集約してデプロイ頻度を削減
+db6692a feat: 更新情報を3行固定表示＋スクロール対応
+（[migrate-img] コミット多数 — 旧サイト画像の GitHub 移行）
 98975c5 GAS: 孤立記事クリーンアップ機能を追加
 bdbf9bb GAS: 公開完了メッセージからファイル名を非表示
 b9f4b9d GAS: Docs横並び画像をweb上でも横並びで表示
@@ -416,10 +472,9 @@ PTA-web/
 
 | # | タスク | 優先度 |
 |---|---|---|
-| 1 | GitHub Actions エラーの調査・修正 | 高 |
-| 2 | Google フォームの作成（コンタクト用） | 高 |
-| 3 | Google ドライブの整備（会員限定ファイルの共有設定） | 中 |
-| 4 | 担当者向けマニュアルの作成（GAS 操作手順・スプレッドシート運用ルールを含む） | 中 |
-| 5 | 公開・旧サイトとの並行運用開始 | 中 |
-| 6 | 旧サイトアーカイブ（Google ドライブに保存） | 低 |
-| 7 | 旧サイト閉鎖 | 低（移行安定後） |
+| 1 | Google フォームの作成（コンタクト用） | 高 |
+| 2 | Google ドライブの整備（会員限定ファイルの共有設定） | 中 |
+| 3 | 担当者向けマニュアルの作成（GAS 操作手順・スプレッドシート運用ルールを含む） | 中 |
+| 4 | 公開・旧サイトとの並行運用開始 | 中 |
+| 5 | 旧サイトアーカイブ（Google ドライブに保存） | 低 |
+| 6 | 旧サイト閉鎖 | 低（移行安定後） |
