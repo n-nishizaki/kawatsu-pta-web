@@ -139,15 +139,15 @@ def build_markdown(article):
     if body:
         md += body + '\n\n'
 
-    # 画像（1枚: Markdown記法 / 複数: flexbox横並び）
+    # 画像（1枚: Markdown記法 / 複数: photo-grid）
     if len(images) == 1:
         md += f'![]({images[0]})\n'
     elif len(images) > 1:
         img_tags = '\n'.join(
-            f'<img src="{src}" alt="写真" style="flex:1;min-width:0;max-width:100%;">'
+            f'<img src="{src}" alt="写真">'
             for src in images
         )
-        md += f'<div style="display:flex;gap:8px;flex-wrap:wrap;">\n{img_tags}\n</div>\n'
+        md += f'<div class="photo-grid">\n{img_tags}\n</div>\n'
 
     return md
 

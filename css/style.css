@@ -284,6 +284,27 @@ a:hover {
   margin: 10px 0;
   border: 1px solid #ddd;
 }
+
+/* 記事内写真グリッド（CSS columns / Pinterest風） */
+.photo-grid {
+  columns: 3;
+  column-gap: 8px;
+  margin: 16px 0;
+}
+.photo-grid img {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 0 8px;
+  border: 1px solid #ddd;
+  break-inside: avoid;
+}
+@media (max-width: 768px) {
+  .photo-grid { columns: 2; }
+}
+@media (max-width: 480px) {
+  .photo-grid { columns: 1; }
+}
 .post-body ul, .post-body ol {
   padding-left: 20px;
   margin-bottom: 12px;
