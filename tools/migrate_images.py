@@ -284,7 +284,7 @@ def process_post(file_info, dry_run=False):
             fail_count += 1
             continue
 
-        time.sleep(SLEEP_SEC)
+        time.sleep(GITHUB_SLEEP)
 
         # ── d. MD 内 URL 差し替え ──
         new_content = new_content.replace(OLD_BASE + filename, new_url)
